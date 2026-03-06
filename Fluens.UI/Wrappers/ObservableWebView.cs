@@ -1,11 +1,8 @@
 ﻿using Fluens.AppCore.Contracts;
 using Fluens.AppCore.Helpers;
-using Fluens.UI.Helpers;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
-using System.Reactive.Disposables;
-using System.Reactive.Disposables.Fluent;
+using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
@@ -14,20 +11,22 @@ namespace Fluens.UI.Helpers;
 
 public sealed partial class ObservableWebView : IObservableWebView
 {
-    private readonly CompositeDisposable Disposables = [];
     private readonly WebView2 WebView;
-    private Subject<bool> IsNavigatingSource { get; } = new();
+    private readonly Subject<bool> IsNavigatingSource = new();
     public IObservable<bool> IsNavigating => IsNavigatingSource.AsObservable();
-    private Subject<string> DocumentTitleSource { get; set; } = new();
+    private readonly Subject<string> DocumentTitleSource = new();
     public IObservable<string> DocumentTitle => DocumentTitleSource.AsObservable();
-    private Subject<string> FaviconUrlSource { get; set; } = new();
+    private readonly Subject<string> FaviconUrlSource = new();
     public IObservable<string> FaviconUrl => FaviconUrlSource.AsObservable();
-    private Subject<Uri> UrlSource { get; set; } = new();
+    private readonly Subject<Uri> UrlSource = new();
     public IObservable<Uri> Url => UrlSource.AsObservable();
-    private Subject<Uri> OpenNewTabSource { get; set; } = new();
-    public IObservable<Uri> OpenNewTab => OpenNewTabSource.AsObservable();
-    private Subject<ShortcutMessage> KeyboardShortcutsSource { get; set; } = new();
+    private readonly Subject<NewTabRequest> OpenNewTabSource = new();
+    public IObservable<NewTabRequest> OpenNewTab => OpenNewTabSource.AsObservable();
+    private readonly Subject<ShortcutMessage> KeyboardShortcutsSource = new();
     public IObservable<ShortcutMessage> KeyboardShortcuts => KeyboardShortcutsSource.AsObservable();
+
+    private bool IsInitialized { get; set; }
+    private bool IsDisposed { get; set; }
 
     public Uri? Source => WebView.Source;
 
@@ -39,9 +38,26 @@ public sealed partial class ObservableWebView : IObservableWebView
         EnsureInitializedCoreWebView2Async = new(() => EnsureCoreWebView2Async());
     }
 
-    private async Task AddShortcutListenersAsync()
+    private async Task AddPageListenersAsync()
     {
-        string script = @"
+        string script = """
+if (!window.__fluensListenersRegistered) {
+  window.__fluensListenersRegistered = true;
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0) {
+      return;
+    }
+
+    const anchor = e.target?.closest?.('a[target="_blank"]');
+    if (!anchor || !anchor.href) {
+      return;
+    }
+
+    e.preventDefault();
+    window.chrome.webview.postMessage({ type: 'openNewTab', url: anchor.href, shouldActivate: true });
+  }, true);
+
 window.addEventListener('keydown', function (e) {
   const combo = `${e.code}|ctrl:${e.ctrlKey }|shift:${e.shiftKey}`;
   switch (combo) {
@@ -56,13 +72,14 @@ window.addEventListener('keydown', function (e) {
       break;
 
     case 'KeyW|ctrl:true|shift:false':
-    case 'KeyW|ctrl:true|shift:true': // handle with same action or split if needed
+    case 'KeyW|ctrl:true|shift:true':
       e.preventDefault();
       window.chrome.webview.postMessage({ key: 'W', ctrl: true, shift: e.shiftKey });
       break;
   }
 });
-";
+}
+""";
 
         await WebView.CoreWebView2.ExecuteScriptAsync(script);
     }
@@ -71,27 +88,47 @@ window.addEventListener('keydown', function (e) {
     //https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2.stop?view=webview2-dotnet-1.0.3351.48#remarks
     public void StopNavigation()
     {
-        WebView.CoreWebView2.Stop();
+        WebView.CoreWebView2?.Stop();
     }
 
     public void Refresh()
     {
-        WebView.CoreWebView2.Reload();
+        WebView.CoreWebView2?.Reload();
     }
 
     public void Dispose()
     {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        IsDisposed = true;
+
+        if (WebView.CoreWebView2 is not null)
+        {
+            DetachCoreEvents(WebView.CoreWebView2);
+        }
+
         IsNavigatingSource.OnCompleted();
         DocumentTitleSource.OnCompleted();
+        FaviconUrlSource.OnCompleted();
         UrlSource.OnCompleted();
         OpenNewTabSource.OnCompleted();
         KeyboardShortcutsSource.OnCompleted();
-        Disposables.Dispose();
-        WebView.Close();
+
+        IsNavigatingSource.Dispose();
+        DocumentTitleSource.Dispose();
+        FaviconUrlSource.Dispose();
+        UrlSource.Dispose();
+        OpenNewTabSource.Dispose();
+        KeyboardShortcutsSource.Dispose();
     }
 
     public async Task NavigateToUrlAsync(Uri url)
     {
+        ArgumentNullException.ThrowIfNull(url);
+
         await EnsureInitializedCoreWebView2Async.Value;
         WebView.Source = url;
     }
@@ -100,105 +137,139 @@ window.addEventListener('keydown', function (e) {
     {
         await WebView.EnsureCoreWebView2Async();
 
-        await AddShortcutListenersAsync();
+        if (IsInitialized)
+        {
+            return;
+        }
 
-        Observable.FromEventPattern(WebView.CoreWebView2, nameof(WebView.CoreWebView2.NavigationStarting))
-            .Select(_ => true)
-            .Merge(Observable.FromEventPattern(WebView.CoreWebView2, nameof(WebView.CoreWebView2.NavigationCompleted))
-            .Select(_ => false))
-            .Subscribe(v => IsNavigatingSource.OnNext(v));
-
-        Observable.FromEventPattern(WebView.CoreWebView2, nameof(WebView.CoreWebView2.DocumentTitleChanged))
-            .Select(_ => WebView.CoreWebView2.DocumentTitle)
-            .Subscribe(DocumentTitleSource.OnNext)
-            .DisposeWith(Disposables);
-
-        Observable.FromEventPattern<CoreWebView2, CoreWebView2NavigationStartingEventArgs>(WebView.CoreWebView2, nameof(WebView.CoreWebView2.NavigationStarting))
-            .Subscribe(ep =>
-            {
-                FaviconUrlSource.OnNext(Constants.LoadingFaviconUri);
-            })
-            .DisposeWith(Disposables);
-
-        Observable.FromEventPattern<CoreWebView2, object>(WebView.CoreWebView2, nameof(WebView.CoreWebView2.FaviconChanged))
-            .Select(_ => WebView.CoreWebView2.FaviconUri)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Subscribe(x => FaviconUrlSource.OnNext(x))
-            .DisposeWith(Disposables);
-
-        Observable.FromEventPattern<CoreWebView2, CoreWebView2NavigationCompletedEventArgs>(WebView.CoreWebView2, nameof(WebView.CoreWebView2.NavigationCompleted))
-            .Subscribe(async ep =>
-            {
-                await AddShortcutListenersAsync();
-
-                if (ep.EventArgs.IsSuccess)
-                {
-                    if (WebView.Source == Constants.AboutBlankUri)
-                    {
-                        FaviconUrlSource.OnNext(string.Empty);
-                    }
-                    else
-                    {
-                        FaviconUrlSource.OnNext(WebView.CoreWebView2.FaviconUri);
-                    }
-                }
-            })
-            .DisposeWith(Disposables);
-
-        Observable.FromEventPattern<CoreWebView2, object>(WebView.CoreWebView2, nameof(WebView.CoreWebView2.HistoryChanged))
-            .Select(ep => ep.Sender!.Source)
-            .Subscribe(source => UrlSource.OnNext(new Uri(source)))
-            .DisposeWith(Disposables);
-
-        Observable.FromEventPattern<CoreWebView2, CoreWebView2NewWindowRequestedEventArgs>(WebView.CoreWebView2, nameof(WebView.CoreWebView2.NewWindowRequested))
-            .Subscribe(ep =>
-            {
-                ep.EventArgs.Handled = true;
-
-                if (Uri.TryCreate(ep.EventArgs.Uri, UriKind.Absolute, out Uri? uri))
-                {
-                    OpenNewTabSource.OnNext(uri);
-                }
-            })
-            .DisposeWith(Disposables);
-
-        Observable.FromEventPattern<CoreWebView2, CoreWebView2WebMessageReceivedEventArgs>(WebView.CoreWebView2, nameof(WebView.CoreWebView2.WebMessageReceived))
-            .Subscribe(ep =>
-            {
-                ShortcutMessage? message = JsonSerializer.Deserialize<ShortcutMessage>(ep.EventArgs.WebMessageAsJson);
-
-                if (message == null)
-                {
-                    Log_ShortcutMessage_Deserialization_Error(ep.EventArgs.WebMessageAsJson);
-                    return;
-                }
-
-                KeyboardShortcutsSource.OnNext(message);
-            })
-            .DisposeWith(Disposables);
+        IsInitialized = true;
+        AttachCoreEvents(WebView.CoreWebView2);
+        await AddPageListenersAsync();
     }
 
+    private void AttachCoreEvents(CoreWebView2 coreWebView)
+    {
+        coreWebView.NavigationStarting += OnNavigationStarting;
+        coreWebView.NavigationCompleted += OnNavigationCompleted;
+        coreWebView.DocumentTitleChanged += OnDocumentTitleChanged;
+        coreWebView.FaviconChanged += OnFaviconChanged;
+        coreWebView.HistoryChanged += OnHistoryChanged;
+        coreWebView.NewWindowRequested += OnNewWindowRequested;
+        coreWebView.WebMessageReceived += OnWebMessageReceived;
+    }
 
-    //Used by the LoggerMessage
-#pragma warning disable CA1823 // Avoid unused private fields
-    private readonly ILogger _logger = ServiceLocator.GetRequiredService<ILogger<ObservableWebView>>();
-#pragma warning restore CA1823 // Avoid unused private fields
+    private void DetachCoreEvents(CoreWebView2 coreWebView)
+    {
+        coreWebView.NavigationStarting -= OnNavigationStarting;
+        coreWebView.NavigationCompleted -= OnNavigationCompleted;
+        coreWebView.DocumentTitleChanged -= OnDocumentTitleChanged;
+        coreWebView.FaviconChanged -= OnFaviconChanged;
+        coreWebView.HistoryChanged -= OnHistoryChanged;
+        coreWebView.NewWindowRequested -= OnNewWindowRequested;
+        coreWebView.WebMessageReceived -= OnWebMessageReceived;
+    }
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "ShortcutMessage Deserialization Error: {webMessageAsJson}")]
-    private partial void Log_ShortcutMessage_Deserialization_Error(string webMessageAsJson);
+    private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
+    {
+        IsNavigatingSource.OnNext(true);
+        FaviconUrlSource.OnNext(Constants.LoadingFaviconUri);
+    }
+
+    private async void OnNavigationCompleted(CoreWebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        IsNavigatingSource.OnNext(false);
+        await AddPageListenersAsync();
+
+        if (!args.IsSuccess)
+        {
+            return;
+        }
+
+        FaviconUrlSource.OnNext(WebView.Source == Constants.AboutBlankUri ? string.Empty : sender.FaviconUri);
+    }
+
+    private void OnDocumentTitleChanged(CoreWebView2 sender, object args)
+    {
+        DocumentTitleSource.OnNext(sender.DocumentTitle);
+    }
+
+    private void OnFaviconChanged(CoreWebView2 sender, object args)
+    {
+        if (!string.IsNullOrWhiteSpace(sender.FaviconUri))
+        {
+            FaviconUrlSource.OnNext(sender.FaviconUri);
+        }
+    }
+
+    private void OnHistoryChanged(CoreWebView2 sender, object args)
+    {
+        if (Uri.TryCreate(sender.Source, UriKind.Absolute, out Uri? uri))
+        {
+            UrlSource.OnNext(uri);
+        }
+    }
+
+    private void OnNewWindowRequested(CoreWebView2 sender, CoreWebView2NewWindowRequestedEventArgs args)
+    {
+        args.Handled = true;
+
+        if (Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri))
+        {
+            OpenNewTabSource.OnNext(new NewTabRequest(uri, ShouldNavigate: false));
+        }
+    }
+
+    private void OnWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    {
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(args.WebMessageAsJson);
+            JsonElement root = doc.RootElement;
+
+            if (root.TryGetProperty("type", out JsonElement typeElement)
+                && string.Equals(typeElement.GetString(), "openNewTab", StringComparison.Ordinal)
+                && root.TryGetProperty("url", out JsonElement urlElement)
+                && Uri.TryCreate(urlElement.GetString(), UriKind.Absolute, out Uri? url))
+            {
+                bool shouldActivate = root.TryGetProperty("shouldActivate", out JsonElement activateElement)
+                    && activateElement.ValueKind is JsonValueKind.True or JsonValueKind.False
+                    && activateElement.GetBoolean();
+
+                OpenNewTabSource.OnNext(new NewTabRequest(url, shouldActivate));
+                return;
+            }
+
+            ShortcutMessage? message = JsonSerializer.Deserialize<ShortcutMessage>(args.WebMessageAsJson);
+
+            if (message is not null)
+            {
+                KeyboardShortcutsSource.OnNext(message);
+            }
+        }
+        catch (JsonException)
+        {
+            Debug.WriteLine($"Failed to deserialize shortcut message: {args.WebMessageAsJson}");
+        }
+    }
 
     public void GoBack()
     {
-        WebView.GoBack();
+        if (WebView.CanGoBack)
+        {
+            WebView.GoBack();
+        }
     }
 
     public void GoForward()
     {
-        WebView.GoForward();
+        if (WebView.CanGoForward)
+        {
+            WebView.GoForward();
+        }
     }
 
     public async Task ActivateAsync()
     {
-        await WebView.EnsureCoreWebView2Async();
+        await EnsureInitializedCoreWebView2Async.Value;
     }
 }

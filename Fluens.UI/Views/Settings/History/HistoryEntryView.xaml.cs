@@ -20,7 +20,7 @@ public sealed partial class HistoryEntryView : ReactiveHistoryEntryView
             this.OneWayBind(ViewModel, vm => vm.FaviconUrl, v => v.Favicon.Source, p => ImageSourceExtensions.GetFromUrl(p)).DisposeWith(d);
             this.OneWayBind(ViewModel, vm => vm.DocumentTitle, v => v.DocumentTitle.Text).DisposeWith(d);
             this.OneWayBind(ViewModel, vm => vm.Host, v => v.Host.Text).DisposeWith(d);
-            this.BindCommand(ViewModel, x => x.OpenUrl, v => v.HyperlinkBtn).DisposeWith(d);
+            //this.BindCommand(ViewModel, x => x.OpenUrl, v => v.HyperlinkBtn).DisposeWith(d);
         });
     }
 }

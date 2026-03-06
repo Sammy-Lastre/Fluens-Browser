@@ -56,17 +56,20 @@ public sealed partial class AppTabContent : ReactiveAppTab, IDisposable
 
         Observable.FromEventPattern(SearchBar, nameof(SearchBar.Loaded))
             .SelectMany(_ => Observable.FromEventPattern<KeyRoutedEventArgs>(SearchBar.FindDescendant<TextBox>()!, nameof(KeyDown)))
-            .Subscribe(ep => DetectEnterKey(ep.EventArgs.Key));
+            .Subscribe(ep => DetectEnterKey(ep.EventArgs.Key))
+            .DisposeWith(Disposables);
 
         Observable.FromEventPattern<RoutedEventArgs>(SearchBar, nameof(SearchBar.GotFocus))
-                .Subscribe(_ => SearchBar.FindDescendant<TextBox>()!.SelectAll());
+                .Subscribe(_ => SearchBar.FindDescendant<TextBox>()!.SelectAll())
+                .DisposeWith(Disposables);
 
         Observable.FromEventPattern<SizeChangedEventArgs>(WebView, nameof(WebView.SizeChanged))
             .Subscribe(ep =>
             {
                 SettingsDialogContent.Width = WebView.ActualWidth;
                 SettingsDialogContent.Height = WebView.ActualHeight;
-            });
+            })
+            .DisposeWith(Disposables);
 
         this.WhenAnyValue(x => x.SettingsView.ViewModel.HistoryPageViewModel)
             .WhereNotNull()
