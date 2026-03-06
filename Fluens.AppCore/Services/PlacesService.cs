@@ -8,18 +8,20 @@ namespace Fluens.AppCore.Services;
 
 public class PlacesService(IDbContextFactory<BrowserDbContext> dbContextFactory, HttpUrlNormalizer httpUrlNormalizer)
 {
-    public async Task<int> GetorCreatePlaceAsync(Uri url, CancellationToken cancellationToken = default)
+    public async Task<int> GetOrCreatePlaceAsync(Uri url, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(url);
+
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        string normilizedUrl = url != Constants.AboutBlankUri ? httpUrlNormalizer.Normalize(url.ToString()) : Constants.AboutBlankUri.ToString();
+        string normalizedUrl = url != Constants.AboutBlankUri ? httpUrlNormalizer.Normalize(url.ToString()) : Constants.AboutBlankUri.ToString();
 
         //Get or create place
-        Place place = await dbContext.Places.SingleOrDefaultAsync(e => e.NormalizedUrl == normilizedUrl, cancellationToken: cancellationToken)
+        Place place = await dbContext.Places.SingleOrDefaultAsync(e => e.NormalizedUrl == normalizedUrl, cancellationToken: cancellationToken)
             ?? (await dbContext.Places.AddAsync(new Place()
             {
                 Url = url.ToString(),
-                NormalizedUrl = normilizedUrl,
+                NormalizedUrl = normalizedUrl,
                 Path = url.AbsolutePath,
                 Hostname = url.Host,
                 LastVisitDate = DateTime.UtcNow,

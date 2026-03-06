@@ -4,6 +4,8 @@ using Fluens.AppCore.Services;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 
@@ -11,11 +13,14 @@ namespace Fluens.AppCore.ViewModels;
 
 public partial class AppTabViewModel : ReactiveObject, IDisposable
 {
-    private const string httpsPrefix = "https://";
-    private const string httpPrefix = "http://";
+    private const string HttpsPrefix = "https://";
+    private const string HttpPrefix = "http://";
 
     public IObservable<ShortcutMessage> KeyboardShortcuts => KeyboardShortcutsSource.AsObservable();
     private Subject<ShortcutMessage> KeyboardShortcutsSource { get; } = new();
+    private CompositeDisposable Subscriptions { get; } = [];
+    private SerialDisposable WebViewSubscriptions { get; } = new();
+    private int? CurrentPlaceId { get; set; }
 
     [Reactive]
     public partial int Id { get; set; }
@@ -45,7 +50,7 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
     public partial bool IsSelected { get; set; }
 
     [Reactive]
-    public partial Uri Url { get; set; } = null!;
+    public partial Uri Url { get; set; } = Constants.AboutBlankUri;
 
     [Reactive]
     public partial string SearchBarText { get; set; } = string.Empty;
@@ -60,7 +65,7 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> GoBack { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> GoForward { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> Stop { get; private set; } = null!;
-    public ReactiveCommand<Unit, Unit> ToggleSettingsDialogCommand { get; private set; }
+    public ReactiveCommand<Unit, Unit> ToggleSettingsDialogCommand { get; private set; } = null!;
 
     private TabPersistencyService TabPersistencyService { get; } = ServiceLocator.GetRequiredService<TabPersistencyService>();
     private VisitsService VisitsService { get; } = ServiceLocator.GetRequiredService<VisitsService>();
@@ -69,76 +74,100 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
 
     public AppTabViewModel()
     {
+        GoBack = ReactiveCommand.Create(() => ObservableWebView?.GoBack());
+        GoForward = ReactiveCommand.Create(() => ObservableWebView?.GoForward());
+        Refresh = ReactiveCommand.Create(() => ObservableWebView?.Refresh());
+        Stop = ReactiveCommand.Create(() => ObservableWebView?.StopNavigation());
         ToggleSettingsDialogCommand = ReactiveCommand.Create(() => { SettingsDialogIsOpen = !SettingsDialogIsOpen; });
 
         this.WhenAnyValue(x => x.Index, x => x.Id, (index, id) => new { index, id })
             .Where(i => i.index != null && i.id > 0)
-            .Subscribe(async i => await TabPersistencyService.UpdateTabInfoAsync(i.id, index: i.index));
+            .SelectMany(i => Observable.FromAsync(() => TabPersistencyService.UpdateTabInfoAsync(i.id, index: i.index)))
+            .Subscribe()
+            .DisposeWith(Subscriptions);
 
         this.WhenAnyValue(x => x.ParentWindowId, x => x.Id, (parentWindowId, id) => new { parentWindowId, id })
             .Where(i => i.id > 0 && i.parentWindowId > 0)
-            .Subscribe(async i => await TabPersistencyService.UpdateTabInfoAsync(i.id, windowId: i.parentWindowId));
+            .SelectMany(i => Observable.FromAsync(() => TabPersistencyService.UpdateTabInfoAsync(i.id, windowId: i.parentWindowId)))
+            .Subscribe()
+            .DisposeWith(Subscriptions);
 
         this.WhenAnyValue(x => x.IsSelected, x => x.Id, (IsSelected, id) => new { IsSelected, id })
             .Where(i => i.id > 0)
-            .Subscribe(async i => await TabPersistencyService.UpdateTabInfoAsync(i.id, isSelected: i.IsSelected));
+            .SelectMany(i => Observable.FromAsync(() => TabPersistencyService.UpdateTabInfoAsync(i.id, isSelected: i.IsSelected)))
+            .Subscribe()
+            .DisposeWith(Subscriptions);
 
         this.WhenAnyValue(x => x.Url)
             .WhereNotNull()
-            .Subscribe(_ => UpdateSearchBar());
+            .Subscribe(_ => UpdateSearchBar())
+            .DisposeWith(Subscriptions);
 
         this.WhenAnyValue(x => x.ObservableWebView)
             .WhereNotNull()
-            .Subscribe(webView =>
-            {
-                GoBack = ReactiveCommand.Create(webView!.GoBack);
-                GoForward = ReactiveCommand.Create(webView.GoForward);
-                Refresh = ReactiveCommand.Create(webView.Refresh);
-                Stop = ReactiveCommand.Create(webView.StopNavigation);
-
-                webView.IsNavigating.Subscribe(SetStopRefreshVisibility);
-                webView.Url.Subscribe(url => Url = url);
-
-                // Updates the place in this tab and the place's favicon and title
-                webView.Url.Where(url => url != null && url != Constants.AboutBlankUri && Id > 0)
-                    .ObserveOn(RxApp.TaskpoolScheduler)
-                    .Select(url =>
-                        Observable.FromAsync(async ct =>
-                        {
-                            int placeId = await PlacesService.GetorCreatePlaceAsync(url, ct);
-                            await VisitsService.AddEntryAsync(placeId, ct);
-                            await TabPersistencyService.UpdateTabInfoAsync(Id, placeId: placeId, cancellationToken: ct);
-                            return placeId;
-                        })
-                        .SelectMany(placeId => Observable.Merge(
-                                this.WhenAnyValue(x => x.FaviconUrl)
-                                    .DistinctUntilChanged()
-                                    .Where(v => !string.IsNullOrWhiteSpace(v) && v != Constants.LoadingFaviconUri)
-                                    .SelectMany(v => Observable.FromAsync(() => PlacesService.UpdatePlaceAsync(placeId, faviconUrl: v))),
-                                this.WhenAnyValue(x => x.DocumentTitle)
-                                    .DistinctUntilChanged()
-                                    .Where(v => !string.IsNullOrWhiteSpace(v) && v != Constants.NewTabTitle)
-                                    .SelectMany(v => Observable.FromAsync(() => PlacesService.UpdatePlaceAsync(placeId, title: v))))
-                        ))
-                    .Switch()
-                    .Subscribe();
-
-                webView.DocumentTitle.Subscribe(documentTitle => DocumentTitle = documentTitle);
-                webView.FaviconUrl.Subscribe(faviconUrl => FaviconUrl = faviconUrl);
-                webView.OpenNewTab.Subscribe(async uri =>
-                {
-                    IViewFor<AppPageViewModel> page = TabPageManager.GetParentTabPage(this);
-                    AppTabViewModel vm = await page.ViewModel!.CreateTabAsync(uri);
-                    page.ViewModel.CreateTabViewItem(vm);
-                    vm.Activate();
-                });
-                webView.KeyboardShortcuts.Subscribe(KeyboardShortcutsSource.OnNext);
-            });
+            .Subscribe(BindWebView);
 
         this.WhenAnyValue(x => x.IsSelected, x => x.ObservableWebView, x => x.Url, (isSelected, web, url) => isSelected && web != null && url != Constants.AboutBlankUri)
             .DistinctUntilChanged()
             .Where(ready => ready)
-            .Subscribe(_ => Activate());
+            .Subscribe(_ => Activate())
+            .DisposeWith(Subscriptions);
+    }
+
+    private void BindWebView(IObservableWebView webView)
+    {
+        CompositeDisposable webViewBindings = [];
+
+        webViewBindings.Add(webView.IsNavigating
+            .Subscribe(SetStopRefreshVisibility));
+
+        webViewBindings.Add(webView.Url
+            .Subscribe(url => Url = url));
+
+        webViewBindings.Add(webView.Url
+            .Where(url => url != Constants.AboutBlankUri && Id > 0)
+            .ObserveOn(RxApp.TaskpoolScheduler)
+            .SelectMany(url => Observable.FromAsync(ct => PersistNavigationAsync(url, ct)))
+            .Subscribe());
+
+        webViewBindings.Add(webView.DocumentTitle
+            .Subscribe(documentTitle => DocumentTitle = documentTitle));
+
+        webViewBindings.Add(this.WhenAnyValue(x => x.DocumentTitle)
+            .DistinctUntilChanged()
+            .Where(title => !string.IsNullOrWhiteSpace(title) && title != Constants.NewTabTitle && CurrentPlaceId is not null)
+            .SelectMany(title => Observable.FromAsync(() => PlacesService.UpdatePlaceAsync(CurrentPlaceId!.Value, title: title)))
+            .Subscribe());
+
+        webViewBindings.Add(webView.FaviconUrl
+            .Subscribe(faviconUrl => FaviconUrl = faviconUrl));
+
+        webViewBindings.Add(this.WhenAnyValue(x => x.FaviconUrl)
+            .DistinctUntilChanged()
+            .Where(faviconUrl => !string.IsNullOrWhiteSpace(faviconUrl) && faviconUrl != Constants.LoadingFaviconUri && CurrentPlaceId is not null)
+            .SelectMany(faviconUrl => Observable.FromAsync(() => PlacesService.UpdatePlaceAsync(CurrentPlaceId!.Value, faviconUrl: faviconUrl)))
+            .Subscribe());
+
+        webViewBindings.Add(webView.OpenNewTab
+            .SelectMany(newTabRequest => Observable.FromAsync(async () =>
+            {
+                IViewFor<AppPageViewModel> page = TabPageManager.GetParentTabPage(this);
+                AppTabViewModel vm = await page.ViewModel!.CreateTabAsync(newTabRequest.Url);
+                page.ViewModel.CreateTabViewItem(vm);
+
+                if (newTabRequest.ShouldNavigate)
+                {
+                    page.ViewModel.SelectItem(vm);
+                }
+
+                await vm.ActivateAsync();
+            }))
+            .Subscribe());
+
+        webViewBindings.Add(webView.KeyboardShortcuts
+            .Subscribe(KeyboardShortcutsSource.OnNext));
+
+        WebViewSubscriptions.Disposable = webViewBindings;
     }
 
     public void ShortcutMessageInvoked(ShortcutMessage shortcutMessage)
@@ -156,10 +185,44 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
             return;
         }
 
+        Uri url = BuildNavigationUri(search);
+
+        await (ObservableWebView?.NavigateToUrlAsync(url) ?? Task.CompletedTask);
+    }
+
+    public void Activate()
+    {
+        _ = ActivateAsync();
+    }
+
+    public async Task ActivateAsync()
+    {
+        IObservableWebView? webView = ObservableWebView;
+
+        if (webView is null)
+        {
+            return;
+        }
+
+        await webView.ActivateAsync();
+
+        if (Url == Constants.AboutBlankUri && webView.Source is null)
+        {
+            return;
+        }
+
+        if (Url != webView.Source)
+        {
+            await webView.NavigateToUrlAsync(Url);
+        }
+    }
+
+    private static Uri BuildNavigationUri(string search)
+    {
         bool containsDot = search.Contains('.', StringComparison.Ordinal);
         bool startsOrEndsWithDot = search.StartsWith('.') || search.EndsWith('.');
-        bool hasScheme = search.StartsWith(httpsPrefix, StringComparison.OrdinalIgnoreCase)
-                      || search.StartsWith(httpPrefix, StringComparison.OrdinalIgnoreCase);
+        bool hasScheme = search.StartsWith(HttpsPrefix, StringComparison.OrdinalIgnoreCase)
+                      || search.StartsWith(HttpPrefix, StringComparison.OrdinalIgnoreCase);
 
         // Follow original logic: only use the raw input as a URL if it contains a dot, does not start/end with a dot,
         // and already begins with http(s). Otherwise prepend https://
@@ -168,7 +231,7 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
 
         if (containsDot && !startsOrEndsWithDot && !hasScheme)
         {
-            candidate = httpsPrefix + search;
+            candidate = HttpsPrefix + search;
         }
         else
         {
@@ -182,28 +245,26 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
             url = new Uri($"https://duckduckgo.com/?q={query}");
         }
 
-        await (ObservableWebView?.NavigateToUrlAsync(url) ?? Task.CompletedTask);
+        return url;
     }
 
-    public void Activate()
+    private async Task PersistNavigationAsync(Uri url, CancellationToken cancellationToken)
     {
-        this.WhenAnyValue(x => x.ObservableWebView)
-            .WhereNotNull()
-            .Take(1)
-            .Subscribe(async wv =>
-            {
-                await wv.ActivateAsync();
+        int placeId = await PlacesService.GetOrCreatePlaceAsync(url, cancellationToken);
+        CurrentPlaceId = placeId;
 
-                if (Url == Constants.AboutBlankUri && ObservableWebView!.Source is null)
-                {
-                    return;
-                }
+        await VisitsService.AddEntryAsync(placeId, cancellationToken);
+        await TabPersistencyService.UpdateTabInfoAsync(Id, placeId: placeId, cancellationToken: cancellationToken);
 
-                if (Url != ObservableWebView!.Source)
-                {
-                    await ObservableWebView!.NavigateToUrlAsync(Url);
-                }
-            });
+        if (!string.IsNullOrWhiteSpace(FaviconUrl) && FaviconUrl != Constants.LoadingFaviconUri)
+        {
+            await PlacesService.UpdatePlaceAsync(placeId, faviconUrl: FaviconUrl, cancellationToken: cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(DocumentTitle) && DocumentTitle != Constants.NewTabTitle)
+        {
+            await PlacesService.UpdatePlaceAsync(placeId, title: DocumentTitle, cancellationToken: cancellationToken);
+        }
     }
 
     private void UpdateSearchBar()
@@ -239,6 +300,15 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
     {
         if (dispose)
         {
+            WebViewSubscriptions.Dispose();
+            Subscriptions.Dispose();
+            KeyboardShortcutsSource.OnCompleted();
+            KeyboardShortcutsSource.Dispose();
+            GoBack.Dispose();
+            GoForward.Dispose();
+            Refresh.Dispose();
+            Stop.Dispose();
+            ToggleSettingsDialogCommand.Dispose();
             ObservableWebView?.Dispose();
         }
     }

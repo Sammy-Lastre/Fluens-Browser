@@ -8,7 +8,7 @@ public interface IObservableWebView : IDisposable
     IObservable<string> FaviconUrl { get; }
     IObservable<bool> IsNavigating { get; }
     IObservable<Uri> Url { get; }
-    IObservable<Uri> OpenNewTab { get; }
+    IObservable<NewTabRequest> OpenNewTab { get; }
     IObservable<ShortcutMessage> KeyboardShortcuts { get; }
     void GoBack();
     void GoForward();

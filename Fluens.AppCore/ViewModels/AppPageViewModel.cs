@@ -7,6 +7,8 @@ using Fluens.Data.Entities;
 using ReactiveUI;
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 
@@ -17,42 +19,42 @@ public partial class AppPageViewModel : ReactiveObject, IDisposable
     public IObservableTabView TabView { get; }
     public IObservable<Unit> HasNoTabs => hasNoTabs.AsObservable();
     public int WindowId { get; set; }
+    private CompositeDisposable Subscriptions { get; } = [];
+
     public AppPageViewModel(IObservableTabView tabView)
     {
         TabView = tabView;
 
-        TabView.CollectionEmptied.Subscribe(_ => hasNoTabs.OnNext(Unit.Default));
+        TabView.CollectionEmptied
+            .Subscribe(_ => hasNoTabs.OnNext(Unit.Default))
+            .DisposeWith(Subscriptions);
 
-        TabView.TabCloseRequested.Subscribe(async vm => await CloseTabAsync(vm));
+        TabView.TabCloseRequested
+            .SelectMany(vm => Observable.FromAsync(() => CloseTabAsync(vm)))
+            .Subscribe()
+            .DisposeWith(Subscriptions);
 
-        TabView.AddTabButtonClick.Subscribe(async _ => await CreateNewTabAsync());
+        TabView.AddTabButtonClick
+            .SelectMany(_ => Observable.FromAsync(CreateNewTabAsync))
+            .Subscribe()
+            .DisposeWith(Subscriptions);
 
-        TabView.Items.Subscribe(items =>
-        {
-            foreach (AppTabViewModel tab in items)
-            {
-                tab.Index = TabView.IndexOf(tab);
-            }
-        });
+        TabView.Items
+            .Subscribe(UpdateTabIndexes)
+            .DisposeWith(Subscriptions);
 
-        TabView.Items.SelectMany(items => items.Select(vm => vm.KeyboardShortcuts))
+        TabView.Items
+            .Select(items => items.Select(vm => vm.KeyboardShortcuts).Merge())
             .Switch()
-            .Subscribe(async s => await HandleKeyboardShortcutAsync(s));
+            .SelectMany(shortcut => Observable.FromAsync(() => HandleKeyboardShortcutAsync(shortcut)))
+            .Subscribe()
+            .DisposeWith(Subscriptions);
 
         TabView.SelectedItem
             .WhereNotNull()
-            .Subscribe(selectedItem =>
-        {
-            TabView.Items.Take(1).Subscribe(items =>
-            {
-                foreach (AppTabViewModel item in items.Except([selectedItem!]))
-                {
-                    item.IsSelected = false;
-                }
-
-                selectedItem!.IsSelected = true;
-            });
-        });
+            .WithLatestFrom(TabView.Items, (selectedItem, items) => (selectedItem, items))
+            .Subscribe(static t => SetSelectedTab(t.selectedItem, t.items))
+            .DisposeWith(Subscriptions);
     }
 
     private readonly TabPersistencyService TabPersistencyService = ServiceLocator.GetRequiredService<TabPersistencyService>();
@@ -81,14 +83,12 @@ public partial class AppPageViewModel : ReactiveObject, IDisposable
                 break;
         }
 
-        TabView.Items.Take(1)
-            .Subscribe(async items =>
+        ReadOnlyCollection<AppTabViewModel> items = await TabView.Items.Take(1);
+
+        if (items.Count == 0)
         {
-            if (items.Count == 0)
-            {
-                await CreateNewTabAsync();
-            }
-        });
+            await CreateNewTabAsync();
+        }
 
     }
 
@@ -148,16 +148,32 @@ public partial class AppPageViewModel : ReactiveObject, IDisposable
                 await CreateNewTabAsync();
                 break;
             case { Ctrl: true, Key: "W" }:
-                TabView.SelectedItem.WhereNotNull()
-                    .Take(1).
-                    Subscribe(async i => await CloseTabAsync(i!));
+                AppTabViewModel selectedForClose = await TabView.SelectedItem.WhereNotNull().Take(1);
+                await CloseTabAsync(selectedForClose);
                 break;
             case { Key: "F5" }:
-                TabView.SelectedItem.WhereNotNull()
-                    .Take(1)
-                    .Subscribe(i => i!.Refresh.Execute().Subscribe());
+                AppTabViewModel selectedForRefresh = await TabView.SelectedItem.WhereNotNull().Take(1);
+                selectedForRefresh.Refresh.Execute().Subscribe();
                 break;
         }
+    }
+
+    private void UpdateTabIndexes(ReadOnlyCollection<AppTabViewModel> items)
+    {
+        foreach (AppTabViewModel tab in items)
+        {
+            tab.Index = TabView.IndexOf(tab);
+        }
+    }
+
+    private static void SetSelectedTab(AppTabViewModel selectedItem, ReadOnlyCollection<AppTabViewModel> items)
+    {
+        foreach (AppTabViewModel item in items.Except([selectedItem]))
+        {
+            item.IsSelected = false;
+        }
+
+        selectedItem.IsSelected = true;
     }
 
     public void Dispose()
@@ -206,6 +222,7 @@ public partial class AppPageViewModel : ReactiveObject, IDisposable
     {
         if (dispose)
         {
+            Subscriptions.Dispose();
             hasNoTabs.OnCompleted();
             hasNoTabs.Dispose();
             TabView.Dispose();

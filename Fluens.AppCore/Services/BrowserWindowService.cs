@@ -32,6 +32,10 @@ public class BrowserWindowService(IDbContextFactory<BrowserDbContext> dbContextF
 
     public async Task SaveWindowStateAsync(int id, int x, int y, int width, int height, bool isMaximized)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(id, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(height, 1);
+
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
         await dbContext.BrowserWindows.Where(w => w.Id == id)

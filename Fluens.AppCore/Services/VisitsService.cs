@@ -3,7 +3,6 @@ using Fluens.AppCore.ViewModels.Settings.History;
 using Fluens.Data;
 using Fluens.Data.Entities;
 using Microsoft.EntityFrameworkCore;
-using ReactiveUI;
 using System.Collections.ObjectModel;
 
 namespace Fluens.AppCore.Services;
@@ -78,6 +77,11 @@ public class VisitsService(IDbContextFactory<BrowserDbContext> dbContextFactory)
 
     internal async Task DeleteEntriesAsync(int[] placeIds, CancellationToken cancellationToken = default)
     {
+        if (placeIds.Length == 0)
+        {
+            return;
+        }
+
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         await dbContext.Visits.Where(e => placeIds.Contains(e.PlaceId)).ExecuteDeleteAsync(cancellationToken);

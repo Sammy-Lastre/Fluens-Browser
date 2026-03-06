@@ -23,13 +23,17 @@ public class TabPersistencyService(IDbContextFactory<BrowserDbContext> dbContext
     {
         using BrowserDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        Tab[] openTabs = [.. dbContext.Tabs.OrderBy(t => t.Index)];
+        Tab[] openTabs = [.. dbContext.Tabs
+            .Where(t => t.ClosedOn == null)
+            .OrderBy(t => t.Index)];
 
         return openTabs;
     }
 
     public async Task<int> CreateTabAsync(int windowId)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(windowId, 1);
+
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
         Tab entity = new() { BrowserWindowId = windowId };
@@ -43,6 +47,8 @@ public class TabPersistencyService(IDbContextFactory<BrowserDbContext> dbContext
 
     public async Task UpdateTabInfoAsync(int id, int? index = null, int? placeId = null, bool? isSelected = null, int? windowId = null, CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(id, 1);
+
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         await dbContext.Tabs
@@ -70,6 +76,8 @@ public class TabPersistencyService(IDbContextFactory<BrowserDbContext> dbContext
 
     public async Task DeleteTabAsync(int id)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(id, 1);
+
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
         await dbContext.Tabs.Where(t => t.Id == id).ExecuteDeleteAsync();
@@ -84,6 +92,8 @@ public class TabPersistencyService(IDbContextFactory<BrowserDbContext> dbContext
 
     public async Task CloseTabAsync(int id)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(id, 1);
+
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
         await dbContext.Tabs.Where(t => t.Id == id)
@@ -95,6 +105,7 @@ public class TabPersistencyService(IDbContextFactory<BrowserDbContext> dbContext
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
         Tab? tab = await dbContext.Tabs
+            .Include(t => t.Place)
             .Where(t => t.ClosedOn != null)
             .OrderByDescending(t => t.ClosedOn)
             .FirstOrDefaultAsync();
