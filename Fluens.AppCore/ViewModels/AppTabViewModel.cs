@@ -114,7 +114,8 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
         this.WhenAnyValue(x => x.IsSelected, x => x.ObservableWebView, x => x.Url, (isSelected, web, url) => isSelected && web != null && url != Constants.AboutBlankUri)
             .DistinctUntilChanged()
             .Where(ready => ready)
-            .Subscribe(_ => Activate())
+            .SelectMany(i => Observable.FromAsync(() => ActivateAsync()))
+            .Subscribe()
             .DisposeWith(Subscriptions);
     }
 
@@ -194,11 +195,6 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
         Uri url = BuildNavigationUri(search);
 
         await (ObservableWebView?.NavigateToUrlAsync(url) ?? Task.CompletedTask);
-    }
-
-    public void Activate()
-    {
-        _ = ActivateAsync();
     }
 
     public async Task ActivateAsync()

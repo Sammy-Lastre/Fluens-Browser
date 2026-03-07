@@ -12,6 +12,55 @@ namespace Fluens.UI.Helpers;
 
 public sealed partial class ObservableWebView : IObservableWebView
 {
+    private const string FluensScheme = "fluens";
+    private const string SettingsHost = "settings";
+    private const string OpenNewTabMessageType = "openNewTab";
+    private const string MessageTypeProperty = "type";
+    private const string MessageUrlProperty = "url";
+    private const string MessageShouldActivateProperty = "shouldActivate";
+    private const string RegisteredListenersFlag = "__fluensListenersRegistered";
+
+    private const string PageListenersScript = $$"""
+if (!window.{{RegisteredListenersFlag}}) {
+  window.{{RegisteredListenersFlag}} = true;
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0) {
+      return;
+    }
+
+    const anchor = e.target?.closest?.('a[target="_blank"]');
+    if (!anchor || !anchor.href) {
+      return;
+    }
+
+    e.preventDefault();
+    window.chrome.webview.postMessage({ type: '{{OpenNewTabMessageType}}', url: anchor.href, shouldActivate: true });
+  }, true);
+
+window.addEventListener('keydown', function (e) {
+  const combo = `${e.code}|ctrl:${e.ctrlKey }|shift:${e.shiftKey}`;
+  switch (combo) {
+    case 'KeyT|ctrl:true|shift:true':
+      e.preventDefault();
+      window.chrome.webview.postMessage({ key: 'T', ctrl: true, shift: true });
+      break;
+
+    case 'KeyT|ctrl:true|shift:false':
+      e.preventDefault();
+      window.chrome.webview.postMessage({ key: 'T', ctrl: true, shift: false });
+      break;
+
+    case 'KeyW|ctrl:true|shift:false':
+    case 'KeyW|ctrl:true|shift:true':
+      e.preventDefault();
+      window.chrome.webview.postMessage({ key: 'W', ctrl: true, shift: e.shiftKey });
+      break;
+  }
+});
+}
+""";
+
     private readonly WebView2 WebView;
     private readonly StaticPagesHost StaticPagesHost;
     private readonly Subject<bool> IsNavigatingSource = new();
@@ -45,48 +94,7 @@ public sealed partial class ObservableWebView : IObservableWebView
 
     private async Task AddPageListenersAsync()
     {
-        string script = """
-if (!window.__fluensListenersRegistered) {
-  window.__fluensListenersRegistered = true;
-
-  document.addEventListener('click', function (e) {
-    if (e.defaultPrevented || e.button !== 0) {
-      return;
-    }
-
-    const anchor = e.target?.closest?.('a[target="_blank"]');
-    if (!anchor || !anchor.href) {
-      return;
-    }
-
-    e.preventDefault();
-    window.chrome.webview.postMessage({ type: 'openNewTab', url: anchor.href, shouldActivate: true });
-  }, true);
-
-window.addEventListener('keydown', function (e) {
-  const combo = `${e.code}|ctrl:${e.ctrlKey }|shift:${e.shiftKey}`;
-  switch (combo) {
-    case 'KeyT|ctrl:true|shift:true':
-      e.preventDefault();
-      window.chrome.webview.postMessage({ key: 'T', ctrl: true, shift: true });
-      break;
-
-    case 'KeyT|ctrl:true|shift:false':
-      e.preventDefault();
-      window.chrome.webview.postMessage({ key: 'T', ctrl: true, shift: false });
-      break;
-
-    case 'KeyW|ctrl:true|shift:false':
-    case 'KeyW|ctrl:true|shift:true':
-      e.preventDefault();
-      window.chrome.webview.postMessage({ key: 'W', ctrl: true, shift: e.shiftKey });
-      break;
-  }
-});
-}
-""";
-
-        await WebView.CoreWebView2.ExecuteScriptAsync(script);
+        await WebView.CoreWebView2.ExecuteScriptAsync(PageListenersScript);
     }
 
     //TODO: this stop doesn't work on SPA, i.e. Youtube, it doens't stops scripts
@@ -139,9 +147,11 @@ window.addEventListener('keydown', function (e) {
             return;
         }
 
-        if (url == Constants.SettingsUri && StaticPagesHost.IsHostedSettingsUri(WebView.Source))
+        if (StaticPagesHost.IsHostedSettingsUri(WebView.Source))
         {
-            return;
+            string section = GetFluensSection(url);
+            if (section == WebView.Source.AbsolutePath.TrimStart('/'))
+                return;
         }
 
         if (url == WebView.Source)
@@ -261,14 +271,8 @@ window.addEventListener('keydown', function (e) {
             return;
         }
 
-        if (uri == Constants.AboutBlankUri)
-        {
-            return;
-        }
-
         if (StaticPagesHost.IsHostedSettingsUri(uri))
         {
-            //string section = uri.AbsoluteUri.Replace("fluens://", "", StringComparison.OrdinalIgnoreCase);
             Uri settingsUri = new($"fluens:/{uri.AbsolutePath}");
             UrlSource.OnNext(settingsUri);
             return;
@@ -294,12 +298,12 @@ window.addEventListener('keydown', function (e) {
             using JsonDocument doc = JsonDocument.Parse(args.WebMessageAsJson);
             JsonElement root = doc.RootElement;
 
-            if (root.TryGetProperty("type", out JsonElement typeElement)
-                && string.Equals(typeElement.GetString(), "openNewTab", StringComparison.Ordinal)
-                && root.TryGetProperty("url", out JsonElement urlElement)
+            if (root.TryGetProperty(MessageTypeProperty, out JsonElement typeElement)
+                && string.Equals(typeElement.GetString(), OpenNewTabMessageType, StringComparison.Ordinal)
+                && root.TryGetProperty(MessageUrlProperty, out JsonElement urlElement)
                 && Uri.TryCreate(urlElement.GetString(), UriKind.Absolute, out Uri? url))
             {
-                bool shouldActivate = root.TryGetProperty("shouldActivate", out JsonElement activateElement)
+                bool shouldActivate = root.TryGetProperty(MessageShouldActivateProperty, out JsonElement activateElement)
                     && activateElement.ValueKind is JsonValueKind.True or JsonValueKind.False
                     && activateElement.GetBoolean();
 
@@ -327,22 +331,32 @@ window.addEventListener('keydown', function (e) {
             return false;
         }
 
-        bool isFluensSettings = uri.Scheme.Equals("fluens", StringComparison.OrdinalIgnoreCase)
-            && uri.Host.Equals("settings", StringComparison.OrdinalIgnoreCase);
+        bool isFluensSettings = uri.Scheme.Equals(FluensScheme, StringComparison.OrdinalIgnoreCase)
+            && uri.Host.Equals(SettingsHost, StringComparison.OrdinalIgnoreCase);
 
-        bool isChromeSettings = uri.Scheme.Equals("chrome", StringComparison.OrdinalIgnoreCase)
-            && uri.Host.Equals("settings", StringComparison.OrdinalIgnoreCase);
-
-        return isFluensSettings || isChromeSettings;
+        return isFluensSettings;
     }
 
     private async Task NavigateToSettingsPageAsync(Uri uri)
     {
-        string section = uri.AbsoluteUri.Replace("fluens://", "", StringComparison.OrdinalIgnoreCase);
+        string section = GetFluensSection(uri);
 
         await EnsureInitializedCoreWebView2Async.Value;
         Uri settingsUri = await StaticPagesHost.GetSettingsUriAsync();
 
         WebView.Source = new(settingsUri, section);
+    }
+
+    private static string GetFluensSection(Uri uri)
+    {
+        if (!uri.Scheme.Equals(FluensScheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return uri.OriginalString;
+        }
+
+        string pathAndQuery = uri.PathAndQuery.TrimStart('/');
+        return string.IsNullOrEmpty(pathAndQuery)
+            ? uri.Host
+            : string.Concat(uri.Host, "/", pathAndQuery);
     }
 }
