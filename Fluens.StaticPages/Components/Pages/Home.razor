@@ -1,0 +1,33 @@
+﻿@page "/"
+
+@inject ILocalSettingService LocalSettingService
+
+<PageTitle>Settings</PageTitle>
+
+<FluentCard>
+    <FluentLabel>On startup</FluentLabel>
+
+    <FluentRadioGroup TValue="OnStartupSetting"
+                      Name="startup"
+                      Value="@SelectedSetting"
+                      ValueChanged="OnSettingChanged">
+        <FluentRadio Value="@OnStartupSetting.OpenNewTab">Open the New tab page</FluentRadio>
+        <FluentRadio Value="@OnStartupSetting.RestoreOpenTabs">Continue where you left off</FluentRadio>
+        <FluentRadio Value="@OnStartupSetting.RestoreAndOpenNewTab">Continue where you left off and open a New Tab page</FluentRadio>
+    </FluentRadioGroup>
+</FluentCard>
+
+@code {
+    private OnStartupSetting SelectedSetting { get; set; }
+
+    protected override void OnInitialized()
+    {
+        SelectedSetting = LocalSettingService.CurrentOnStartupSetting;
+    }
+
+    private void OnSettingChanged(OnStartupSetting selectedSetting)
+    {
+        SelectedSetting = selectedSetting;
+        LocalSettingService.SetStartupConfig(selectedSetting);
+    }
+}

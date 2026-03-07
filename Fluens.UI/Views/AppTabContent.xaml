@@ -8,7 +8,6 @@
     xmlns:local="using:Fluens.UI.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:rxui="using:ReactiveUI"
-    xmlns:settings="using:Fluens.UI.Views.Settings"
     mc:Ignorable="d">
 
     <local:ReactiveAppTab.Resources>
@@ -88,28 +87,18 @@
                     x:Name="SearchBar"
                     Grid.Column="3"
                     BorderBrush="{ThemeResource CircleElevationBorderBrush}" />
-                <ToggleButton
+                <Button
                     x:Name="ConfigBtn"
                     Grid.Column="4"
-                    Style="{StaticResource SubtleToggleButtonStyle}">
+                    Style="{ThemeResource SubtleButtonStyle}">
                     <FontIcon Glyph="&#xE713;" />
-                </ToggleButton>
+                </Button>
             </Grid>
 
             <WebView2
                 x:Name="WebView"
                 Grid.Row="1"
                 DefaultBackgroundColor="{StaticResource SolidBackgroundFillColorTertiary}" />
-
-            <Popup
-                x:Name="SettingsPopup"
-                Grid.Row="1"
-                IsLightDismissEnabled="False"
-                LightDismissOverlayMode="On">
-                <Border x:Name="SettingsDialogContent">
-                    <settings:SettingsView x:Name="SettingsView" />
-                </Border>
-            </Popup>
         </Grid>
     </Grid>
 

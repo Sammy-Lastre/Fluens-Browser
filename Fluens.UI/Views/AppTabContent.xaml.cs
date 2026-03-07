@@ -1,5 +1,4 @@
 using CommunityToolkit.WinUI;
-using DynamicData;
 using Fluens.AppCore.Helpers;
 using Fluens.AppCore.ViewModels;
 using Fluens.UI.Helpers;
@@ -43,8 +42,6 @@ public sealed partial class AppTabContent : ReactiveAppTab, IDisposable
 
         this.Bind(ViewModel, vm => vm.SearchBarText, v => v.SearchBar.Text).DisposeWith(Disposables);
 
-        this.Bind(ViewModel, vm => vm.SettingsDialogIsOpen, v => v.SettingsPopup.IsOpen).DisposeWith(Disposables);
-        this.OneWayBind(ViewModel, vm => vm.SettingsDialogIsOpen, v => v.ConfigBtn.IsChecked).DisposeWith(Disposables);
         this.OneWayBind(ViewModel, vm => vm.CanStop, v => v.StopBtn.Visibility).DisposeWith(Disposables);
         this.OneWayBind(ViewModel, vm => vm.CanRefresh, v => v.RefreshBtn.Visibility).DisposeWith(Disposables);
 
@@ -52,7 +49,7 @@ public sealed partial class AppTabContent : ReactiveAppTab, IDisposable
         this.BindCommand(ViewModel, vm => vm.GoForward, v => v.GoForwardBtn).DisposeWith(Disposables);
         this.BindCommand(ViewModel, vm => vm.Refresh, v => v.RefreshBtn).DisposeWith(Disposables);
         this.BindCommand(ViewModel, vm => vm.Stop, v => v.StopBtn).DisposeWith(Disposables);
-        this.BindCommand(ViewModel, vm => vm.ToggleSettingsDialogCommand, v => v.ConfigBtn).DisposeWith(Disposables);
+        this.BindCommand(ViewModel, vm => vm.OpenSettingsCommand, v => v.ConfigBtn).DisposeWith(Disposables);
 
         Observable.FromEventPattern(SearchBar, nameof(SearchBar.Loaded))
             .SelectMany(_ => Observable.FromEventPattern<KeyRoutedEventArgs>(SearchBar.FindDescendant<TextBox>()!, nameof(KeyDown)))
@@ -62,28 +59,6 @@ public sealed partial class AppTabContent : ReactiveAppTab, IDisposable
         Observable.FromEventPattern<RoutedEventArgs>(SearchBar, nameof(SearchBar.GotFocus))
                 .Subscribe(_ => SearchBar.FindDescendant<TextBox>()!.SelectAll())
                 .DisposeWith(Disposables);
-
-        Observable.FromEventPattern<SizeChangedEventArgs>(WebView, nameof(WebView.SizeChanged))
-            .Subscribe(ep =>
-            {
-                SettingsDialogContent.Width = WebView.ActualWidth;
-                SettingsDialogContent.Height = WebView.ActualHeight;
-            })
-            .DisposeWith(Disposables);
-
-        this.WhenAnyValue(x => x.SettingsView.ViewModel.HistoryPageViewModel)
-            .WhereNotNull()
-            .Select(vm => vm.Entries.Connect()
-                .MergeMany(entry => entry.OpenUrl.Select(_ => entry.Url))
-            )
-            .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(async url =>
-            {
-                await ViewModel!.ObservableWebView!.NavigateToUrlAsync(url);
-                ViewModel!.SettingsDialogIsOpen = false;
-            })
-            .DisposeWith(Disposables);
 
         this.WhenAnyValue(x => x.ViewModel!.Url)
             .Select(url => url == Constants.AboutBlankUri)
@@ -108,7 +83,6 @@ public sealed partial class AppTabContent : ReactiveAppTab, IDisposable
     {
         if (key == VirtualKey.Enter)
         {
-            SettingsPopup.IsOpen = false;
             ViewModel?.NavigateToInputCommand.Execute().Subscribe();
             WebView.Focus(FocusState.Programmatic);
         }

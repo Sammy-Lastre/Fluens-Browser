@@ -65,7 +65,7 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> GoBack { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> GoForward { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> Stop { get; private set; } = null!;
-    public ReactiveCommand<Unit, Unit> ToggleSettingsDialogCommand { get; private set; } = null!;
+    public ReactiveCommand<Unit, Unit> OpenSettingsCommand { get; private set; } = null!;
 
     private TabPersistencyService TabPersistencyService { get; } = ServiceLocator.GetRequiredService<TabPersistencyService>();
     private VisitsService VisitsService { get; } = ServiceLocator.GetRequiredService<VisitsService>();
@@ -78,7 +78,11 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
         GoForward = ReactiveCommand.Create(() => ObservableWebView?.GoForward());
         Refresh = ReactiveCommand.Create(() => ObservableWebView?.Refresh());
         Stop = ReactiveCommand.Create(() => ObservableWebView?.StopNavigation());
-        ToggleSettingsDialogCommand = ReactiveCommand.Create(() => { SettingsDialogIsOpen = !SettingsDialogIsOpen; });
+        OpenSettingsCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            SearchBarText = Constants.SettingsUri.ToString();
+            await (ObservableWebView?.NavigateToUrlAsync(Constants.SettingsUri) ?? Task.CompletedTask);
+        });
 
         this.WhenAnyValue(x => x.Index, x => x.Id, (index, id) => new { index, id })
             .Where(i => i.index != null && i.id > 0)
@@ -126,7 +130,7 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
 
         webViewBindings.Add(webView.Url
             .Where(url => url != Constants.AboutBlankUri && Id > 0)
-            .ObserveOn(RxApp.TaskpoolScheduler)
+            .ObserveOn(RxSchedulers.TaskpoolScheduler)
             .SelectMany(url => Observable.FromAsync(ct => PersistNavigationAsync(url, ct)))
             .Subscribe());
 
@@ -135,7 +139,9 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
 
         webViewBindings.Add(this.WhenAnyValue(x => x.DocumentTitle)
             .DistinctUntilChanged()
-            .Where(title => !string.IsNullOrWhiteSpace(title) && title != Constants.NewTabTitle && CurrentPlaceId is not null)
+            .Where(title => !string.IsNullOrWhiteSpace(title) &&
+                title != Constants.NewTabTitle &&
+                CurrentPlaceId is not null)
             .SelectMany(title => Observable.FromAsync(() => PlacesService.UpdatePlaceAsync(CurrentPlaceId!.Value, title: title)))
             .Subscribe());
 
@@ -206,19 +212,16 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
 
         await webView.ActivateAsync();
 
-        if (Url == Constants.AboutBlankUri && webView.Source is null)
-        {
-            return;
-        }
-
-        if (Url != webView.Source)
-        {
-            await webView.NavigateToUrlAsync(Url);
-        }
+        await webView.NavigateToUrlAsync(Url);
     }
 
     private static Uri BuildNavigationUri(string search)
     {
+        if (IsSettingsNavigation(search))
+        {
+            return Constants.SettingsUri;
+        }
+
         bool containsDot = search.Contains('.', StringComparison.Ordinal);
         bool startsOrEndsWithDot = search.StartsWith('.') || search.EndsWith('.');
         bool hasScheme = search.StartsWith(HttpsPrefix, StringComparison.OrdinalIgnoreCase)
@@ -246,6 +249,19 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
         }
 
         return url;
+    }
+
+    private static bool IsSettingsNavigation(string search)
+    {
+        if (!Uri.TryCreate(search, UriKind.Absolute, out Uri? uri))
+        {
+            return false;
+        }
+
+        bool isFluensSettings = uri.Scheme.Equals("fluens", StringComparison.OrdinalIgnoreCase)
+            && uri.Host.Equals("settings", StringComparison.OrdinalIgnoreCase);
+
+        return isFluensSettings;
     }
 
     private async Task PersistNavigationAsync(Uri url, CancellationToken cancellationToken)
@@ -308,7 +324,7 @@ public partial class AppTabViewModel : ReactiveObject, IDisposable
             GoForward.Dispose();
             Refresh.Dispose();
             Stop.Dispose();
-            ToggleSettingsDialogCommand.Dispose();
+            OpenSettingsCommand.Dispose();
             ObservableWebView?.Dispose();
         }
     }

@@ -7,6 +7,7 @@ using Fluens.AppCore.ViewModels.Settings.History;
 using Fluens.AppCore.ViewModels.Settings.OnStartup;
 using Fluens.Data;
 using Fluens.Data.Entities;
+using Fluens.StaticPages;
 using Fluens.UI.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,8 +15,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using ReactiveUI;
+using ReactiveUI.Builder;
 using System.Reactive.Linq;
+using System.Reflection;
 using Toimik.UrlNormalization;
 using Windows.Graphics;
 
@@ -29,7 +31,10 @@ public partial class App : Application
     {
         InitializeComponent();
 
-        PlatformRegistrationManager.SetRegistrationNamespaces(RegistrationNamespace.WinUI);
+        IReactiveUIInstance app = RxAppBuilder.CreateReactiveUIBuilder()
+            .WithWinUI()
+            .WithViewsFromAssembly(Assembly.GetExecutingAssembly())
+            .BuildApp();
 
         _host = Host.CreateDefaultBuilder()
             .ConfigureServices((context, services) =>
@@ -48,6 +53,7 @@ public partial class App : Application
                     .AddSingleton<ITabPageManager, TabViewsManager>()
                     .AddSingleton<TabPersistencyService>()
                     .AddSingleton<BrowserWindowService>()
+                    .AddSingleton<StaticPagesHost>()
                     .AddSingleton<VisitsService>()
                     .AddSingleton<ILocalSettingService, LocalSettingService>()
                     .AddSingleton<HttpUrlNormalizer>()

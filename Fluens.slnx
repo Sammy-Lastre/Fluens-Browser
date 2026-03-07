@@ -3,16 +3,14 @@
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
   </Configurations>
-  <Folder Name="/Solution Items/">
-    <File Path=".editorconfig" />
-    <File Path="Directory.Build.props" />
-  </Folder>
+  <Folder Name="/Solution Items/" />
   <Project Path="Fluens.AppCore/Fluens.AppCore.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
   <Project Path="Fluens.Data/Fluens.Data.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
+  <Project Path="Fluens.StaticPages/Fluens.StaticPages.csproj" Id="41c5e773-722f-4366-b659-c53ce2331b19" />
   <Project Path="Fluens.UI/Fluens.UI.csproj">
     <Platform Project="x64" />
     <Deploy />

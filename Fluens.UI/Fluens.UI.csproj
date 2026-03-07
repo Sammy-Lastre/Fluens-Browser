@@ -22,9 +22,11 @@
 		<ImplicitUsings>true</ImplicitUsings>
 	</PropertyGroup>
 	<ItemGroup>
+	  <Content Remove="Assets\Pages\settings.html" />
+	</ItemGroup>
+	<ItemGroup>
 		<None Remove="Views\AppPage.xaml" />
 		<None Remove="Views\SettingsView.xaml" />
-		<None Remove="Views\Settings\Everything.xaml" />
 		<None Remove="Views\Settings\History.xaml" />
 		<None Remove="Views\Settings\History\HistoryEntryView.xaml" />
 	</ItemGroup>
@@ -36,6 +38,10 @@
 		<Content Include="Assets\Square44x44Logo.scale-200.png" />
 		<Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
 		<Content Include="Assets\Wide310x150Logo.scale-200.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Assets\Pages\settings.html" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -51,28 +57,24 @@
 		<ProjectCapability Include="Msix" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.250402" />
-		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6901" />
-		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251003001" />
-		<PackageReference Include="ReactiveUI.SourceGenerators" Version="2.5.1">
+		<PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
+		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.7705" />
+		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260209005" />
+		<PackageReference Include="ReactiveUI.SourceGenerators" Version="2.6.1">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="ReactiveUI.WinUI" Version="22.2.1" />
-		<PackageReference Include="Vanara.PInvoke.User32" Version="4.2.1" />
+		<PackageReference Include="ReactiveUI.WinUI" Version="23.1.8" />
+		<PackageReference Include="Vanara.PInvoke.User32" Version="5.0.0" />
 	</ItemGroup>
 	<ItemGroup>
 	  <ProjectReference Include="..\Fluens.AppCore\Fluens.AppCore.csproj" />
+	  <ProjectReference Include="..\Fluens.StaticPages\Fluens.StaticPages.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 		<Page Update="Views\AppPage.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</Page>
-	</ItemGroup>
-	<ItemGroup>
-	  <Page Update="Views\Settings\Everything.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
 	</ItemGroup>
 	<ItemGroup>
 	  <Page Update="Views\SettingsView.xaml">
@@ -86,11 +88,6 @@
 	</ItemGroup>
 	<ItemGroup>
 	  <Page Update="Views\Settings\History\HistoryEntryView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
-	</ItemGroup>
-	<ItemGroup>
-	  <Page Update="Views\Settings\OnStartup\OnStartupConfig.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </Page>
 	</ItemGroup>

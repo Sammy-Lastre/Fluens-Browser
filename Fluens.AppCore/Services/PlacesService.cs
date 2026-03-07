@@ -14,7 +14,7 @@ public class PlacesService(IDbContextFactory<BrowserDbContext> dbContextFactory,
 
         await using BrowserDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        string normalizedUrl = url != Constants.AboutBlankUri ? httpUrlNormalizer.Normalize(url.ToString()) : Constants.AboutBlankUri.ToString();
+        string normalizedUrl = !Constants.SpecialUrls.Contains(url) ? httpUrlNormalizer.Normalize(url.ToString()) : url.ToString();
 
         //Get or create place
         Place place = await dbContext.Places.SingleOrDefaultAsync(e => e.NormalizedUrl == normalizedUrl, cancellationToken: cancellationToken)
