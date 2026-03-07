@@ -1,0 +1,16 @@
+<FluentCard>
+    <FluentStack Orientation="Orientation.Vertical">
+        <FluentLabel>@Title</FluentLabel>
+        <FluentLabel>@Description</FluentLabel>
+
+        <FluentButton Appearance="Appearance.Neutral" Disabled="true">Coming soon</FluentButton>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Description { get; set; } = string.Empty;
+}

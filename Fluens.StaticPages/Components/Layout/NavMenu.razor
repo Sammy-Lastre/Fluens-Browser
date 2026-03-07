@@ -1,0 +1,26 @@
+﻿<div class="navmenu">
+    <input type="checkbox" title="Menu expand/collapse toggle" id="navmenu-toggle" class="navmenu-icon" />
+    <label for="navmenu-toggle" class="navmenu-icon"><FluentIcon Value="@(new Icons.Regular.Size20.Navigation())" Color="Color.Fill" /></label>
+    <nav class="sitenav" aria-labelledby="main-menu">
+        <FluentNavMenu Id="main-menu" Collapsible="true" Width="250" Title="Settings" @bind-Expanded="expanded" CustomToggle="true">
+            <FluentNavLink Href="/settings/profiles" Match="NavLinkMatch.All" Icon="@(new Icons.Regular.Size20.Person())" IconColor="Color.Accent">Profiles</FluentNavLink>
+            <FluentNavLink Href="/settings/appearance-and-behavior" Icon="@(new Icons.Regular.Size20.PaintBrush())" IconColor="Color.Accent">Appearance and behavior</FluentNavLink>
+            <FluentNavLink Href="/settings/privacy-and-security" Icon="@(new Icons.Regular.Size20.ShieldTask())" IconColor="Color.Accent">Privacy and security</FluentNavLink>
+            <FluentNavLink Href="/settings/performance" Icon="@(new Icons.Regular.Size20.Gauge())" IconColor="Color.Accent">Performance</FluentNavLink>
+            <FluentNavLink Href="/settings/search-engine" Icon="@(new Icons.Regular.Size20.Search())" IconColor="Color.Accent">Search engine</FluentNavLink>
+            <FluentNavLink Href="/settings/default-browser" Icon="@(new Icons.Regular.Size20.Window())" IconColor="Color.Accent">Default browser</FluentNavLink>
+            <FluentNavLink Href="/settings/on-startup" Icon="@(new Icons.Regular.Size20.Power())" IconColor="Color.Accent">On startup</FluentNavLink>
+            <FluentNavLink Href="/settings/languages" Icon="@(new Icons.Regular.Size20.LocalLanguage())" IconColor="Color.Accent">Languages</FluentNavLink>
+            <FluentNavLink Href="/settings/downloads" Icon="@(new Icons.Regular.Size20.ArrowDownload())" IconColor="Color.Accent">Downloads</FluentNavLink>
+            <FluentNavLink Href="/settings/accessibility" Icon="@(new Icons.Regular.Size20.Accessibility())" IconColor="Color.Accent">Accessibility</FluentNavLink>
+            <FluentNavLink Href="/settings/system" Icon="@(new Icons.Regular.Size20.Settings())" IconColor="Color.Accent">System</FluentNavLink>
+            <FluentNavLink Href="/settings/reset-settings" Icon="@(new Icons.Regular.Size20.ArrowReset())" IconColor="Color.Accent">Reset settings</FluentNavLink>
+            <FluentNavLink Href="/settings/extensions" Icon="@(new Icons.Regular.Size20.PuzzleCube())" IconColor="Color.Accent">Extensions</FluentNavLink>
+            <FluentNavLink Href="/settings/about" Icon="@(new Icons.Regular.Size20.Info())" IconColor="Color.Accent">About Fluens</FluentNavLink>
+        </FluentNavMenu>
+    </nav>
+</div>
+
+@code {
+    private bool expanded = true;
+}

@@ -22,9 +22,6 @@
 		<ImplicitUsings>true</ImplicitUsings>
 	</PropertyGroup>
 	<ItemGroup>
-	  <Content Remove="Assets\Pages\settings.html" />
-	</ItemGroup>
-	<ItemGroup>
 		<None Remove="Views\AppPage.xaml" />
 		<None Remove="Views\SettingsView.xaml" />
 		<None Remove="Views\Settings\History.xaml" />
@@ -38,10 +35,6 @@
 		<Content Include="Assets\Square44x44Logo.scale-200.png" />
 		<Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
 		<Content Include="Assets\Wide310x150Logo.scale-200.png" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<EmbeddedResource Include="Assets\Pages\settings.html" />
 	</ItemGroup>
 
 	<ItemGroup>

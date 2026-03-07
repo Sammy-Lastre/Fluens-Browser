@@ -71,14 +71,16 @@ public sealed class StaticPagesHost
         int port = GetOpenPort();
         string baseUrl = $"http://127.0.0.1:{port}/";
 
-        WebApplicationBuilder builder = WebApplication.CreateBuilder();
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         builder.Environment.ApplicationName = typeof(StaticPagesHost).Assembly.GetName().Name!;
-        builder.WebHost.UseUrls(baseUrl);
-        builder.WebHost.UseStaticWebAssets();
-        builder.Services.AddRazorComponents()
+
+        builder.WebHost.UseUrls(baseUrl)
+            .UseStaticWebAssets();
+
+        builder.Services.AddFluentUIComponents()
+            .AddSingleton(LocalSettingService)
+            .AddRazorComponents()
             .AddInteractiveServerComponents();
-        builder.Services.AddFluentUIComponents();
-        builder.Services.AddSingleton(LocalSettingService);
 
         WebApplication app = builder.Build();
 

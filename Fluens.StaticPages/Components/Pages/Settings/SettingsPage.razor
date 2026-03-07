@@ -1,57 +1,69 @@
-﻿@page "/"
-@page "/settings/{SectionSlug}"
+<FluentGrid>
+    <FluentGridItem xs="2">
+        <SettingsNavigation SelectedSection="@SelectedSection"
+                            SelectedSectionChanged="OnSelectedSectionChangedAsync" />
+    </FluentGridItem>
+    <FluentGridItem>
+        <FluentStack Orientation="Orientation.Vertical">
+            <FluentTextField Placeholder="Search settings"
+                             Value="@SearchText"
+                             ValueChanged="OnSearchChangedAsync" />
 
-<PageTitle>Settings</PageTitle>
-
-<FluentGrid Justify="JustifyContent.Center" Style="width: 100%">
-    <FluentGridItem Style="min-width: 400px;">
-        <FluentStack VerticalGap="16" Orientation="Orientation.Vertical">
-            <FluentLabel>@GetSectionTitle(CurrentSection)</FluentLabel>
-
-            @if (CurrentSection == SettingsSection.OnStartup)
+            @if (IsSearchMismatch)
+            {
+                <SettingsPlaceholderSection Title="No matching setting"
+                                            Description="Try a different search term or select a section from the sidebar." />
+            }
+            else if (SelectedSection == SettingsSection.OnStartup)
             {
                 <OnStartupSettingsSection />
             }
             else
             {
-                <SettingsPlaceholderSection Title="@GetSectionTitle(CurrentSection)"
-                                            Description="@GetSectionDescription(CurrentSection)" />
+                <SettingsPlaceholderSection Title="@GetSectionTitle(SelectedSection)"
+                                            Description="@GetSectionDescription(SelectedSection)" />
             }
         </FluentStack>
     </FluentGridItem>
 </FluentGrid>
 
 @code {
-    [Parameter]
-    public string? SectionSlug { get; set; }
+    private SettingsSection SelectedSection { get; set; } = SettingsSection.OnStartup;
+    private string SearchText { get; set; } = string.Empty;
 
-    private SettingsSection CurrentSection { get; set; } = SettingsSection.OnStartup;
+    private bool IsSearchMismatch
+        => !string.IsNullOrWhiteSpace(SearchText)
+           && !GetSectionTitle(SelectedSection).Contains(SearchText, StringComparison.OrdinalIgnoreCase);
 
-    protected override void OnParametersSet()
+    private Task OnSelectedSectionChangedAsync(SettingsSection section)
     {
-        CurrentSection = ParseSection(SectionSlug);
+        SelectedSection = section;
+        return Task.CompletedTask;
     }
 
-    private static SettingsSection ParseSection(string? sectionSlug)
+    private Task OnSearchChangedAsync(string searchText)
     {
-        return sectionSlug?.Trim().ToLowerInvariant() switch
+        SearchText = searchText;
+
+        if (string.IsNullOrWhiteSpace(searchText))
         {
-            "profiles" => SettingsSection.Profiles,
-            "appearance-and-behavior" => SettingsSection.AppearanceAndBehavior,
-            "privacy-and-security" => SettingsSection.PrivacyAndSecurity,
-            "performance" => SettingsSection.Performance,
-            "search-engine" => SettingsSection.SearchEngine,
-            "default-browser" => SettingsSection.DefaultBrowser,
-            "on-startup" => SettingsSection.OnStartup,
-            "languages" => SettingsSection.Languages,
-            "downloads" => SettingsSection.Downloads,
-            "accessibility" => SettingsSection.Accessibility,
-            "system" => SettingsSection.System,
-            "reset-settings" => SettingsSection.ResetSettings,
-            "extensions" => SettingsSection.Extensions,
-            "about" => SettingsSection.About,
-            _ => SettingsSection.OnStartup
-        };
+            return Task.CompletedTask;
+        }
+
+        SettingsSection? matchedSection = GetSections()
+            .FirstOrDefault(section => GetSectionTitle(section).Contains(searchText, StringComparison.OrdinalIgnoreCase));
+
+        if (matchedSection is not null)
+        {
+            SelectedSection = matchedSection.Value;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static IEnumerable<SettingsSection> GetSections()
+    {
+        return Enum.GetValues<SettingsSection>();
     }
 
     private static string GetSectionTitle(SettingsSection section)

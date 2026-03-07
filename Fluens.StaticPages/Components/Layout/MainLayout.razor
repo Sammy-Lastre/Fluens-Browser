@@ -3,9 +3,19 @@
 @inject ILocalSettingService LocalSettingService
 
 <FluentDesignTheme StorageName="theme" CustomColor="@AccentColor" />
-<div class="content">
-	@Body
-</div>
+<FluentLayout>
+    <FluentHeader>
+        Settings
+    </FluentHeader>
+    <FluentStack Class="main" Orientation="Orientation.Horizontal">
+        <NavMenu />
+        <FluentBodyContent Class="body-content">
+            <FluentStack Class="content" Orientation="Orientation.Vertical">
+                @Body
+            </FluentStack>
+        </FluentBodyContent>
+    </FluentStack>
+</FluentLayout>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
