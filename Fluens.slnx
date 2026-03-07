@@ -4,6 +4,7 @@
     <Platform Name="x64" />
   </Configurations>
   <Folder Name="/Solution Items/" />
+  <Project Path="BenchmarkSuite1/BenchmarkSuite1.csproj" />
   <Project Path="Fluens.AppCore/Fluens.AppCore.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
@@ -11,6 +12,7 @@
     <Platform Solution="*|x64" Project="x64" />
   </Project>
   <Project Path="Fluens.StaticPages/Fluens.StaticPages.csproj" Id="41c5e773-722f-4366-b659-c53ce2331b19" />
+  <Project Path="Fluens.UI.Tests/Fluens.UI.Tests.csproj" />
   <Project Path="Fluens.UI/Fluens.UI.csproj">
     <Platform Project="x64" />
     <Deploy />

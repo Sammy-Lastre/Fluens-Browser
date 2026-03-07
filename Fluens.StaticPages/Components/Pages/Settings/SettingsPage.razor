@@ -1,13 +1,7 @@
-<FluentGrid>
-    <FluentGridItem xs="2">
-        <SettingsNavigation SelectedSection="@SelectedSection"
-                            SelectedSectionChanged="OnSelectedSectionChangedAsync" />
-    </FluentGridItem>
+<FluentGrid Justify="JustifyContent.Center" Style="width: 100%">
     <FluentGridItem>
-        <FluentStack Orientation="Orientation.Vertical">
-            <FluentTextField Placeholder="Search settings"
-                             Value="@SearchText"
-                             ValueChanged="OnSearchChangedAsync" />
+        <FluentStack VerticalGap="8" Orientation="Orientation.Vertical">
+            <FluentLabel>@GetSectionTitle(SelectedSection)</FluentLabel>
 
             @if (IsSearchMismatch)
             {
@@ -17,6 +11,10 @@
             else if (SelectedSection == SettingsSection.OnStartup)
             {
                 <OnStartupSettingsSection />
+            }
+            else if (SelectedSection == SettingsSection.PrivacyAndSecurity)
+            {
+                <PrivacyAndSecuritySettingsSection />
             }
             else
             {
@@ -28,8 +26,23 @@
 </FluentGrid>
 
 @code {
+    [Parameter]
+    public string? SectionSlug { get; set; }
+
     private SettingsSection SelectedSection { get; set; } = SettingsSection.OnStartup;
     private string SearchText { get; set; } = string.Empty;
+    private string? LastAppliedSectionSlug { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (string.Equals(LastAppliedSectionSlug, SectionSlug, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SelectedSection = ParseSection(SectionSlug);
+        LastAppliedSectionSlug = SectionSlug;
+    }
 
     private bool IsSearchMismatch
         => !string.IsNullOrWhiteSpace(SearchText)
@@ -64,6 +77,28 @@
     private static IEnumerable<SettingsSection> GetSections()
     {
         return Enum.GetValues<SettingsSection>();
+    }
+
+    private static SettingsSection ParseSection(string? sectionSlug)
+    {
+        return sectionSlug?.Trim().ToLowerInvariant() switch
+        {
+            "profiles" => SettingsSection.Profiles,
+            "appearance-and-behavior" => SettingsSection.AppearanceAndBehavior,
+            "privacy-and-security" => SettingsSection.PrivacyAndSecurity,
+            "performance" => SettingsSection.Performance,
+            "search-engine" => SettingsSection.SearchEngine,
+            "default-browser" => SettingsSection.DefaultBrowser,
+            "on-startup" => SettingsSection.OnStartup,
+            "languages" => SettingsSection.Languages,
+            "downloads" => SettingsSection.Downloads,
+            "accessibility" => SettingsSection.Accessibility,
+            "system" => SettingsSection.System,
+            "reset-settings" => SettingsSection.ResetSettings,
+            "extensions" => SettingsSection.Extensions,
+            "about" => SettingsSection.About,
+            _ => SettingsSection.OnStartup
+        };
     }
 
     private static string GetSectionTitle(SettingsSection section)

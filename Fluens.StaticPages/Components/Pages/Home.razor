@@ -4,98 +4,9 @@
 
 <PageTitle>Settings</PageTitle>
 
-<FluentGrid Justify="JustifyContent.Center" Style="width: 100%">
-    <FluentGridItem Style="min-width: 400px;">
-        <FluentStack VerticalGap="16" Orientation="Orientation.Vertical">
-            <FluentLabel>@GetSectionTitle(CurrentSection)</FluentLabel>
-
-            @if (CurrentSection == SettingsSection.OnStartup)
-            {
-                <OnStartupSettingsSection />
-            }
-            else
-            {
-                <SettingsPlaceholderSection Title="@GetSectionTitle(CurrentSection)"
-                                            Description="@GetSectionDescription(CurrentSection)" />
-            }
-        </FluentStack>
-    </FluentGridItem>
-</FluentGrid>
+<SettingsPage SectionSlug="@SectionSlug" />
 
 @code {
     [Parameter]
     public string? SectionSlug { get; set; }
-
-    private SettingsSection CurrentSection { get; set; } = SettingsSection.OnStartup;
-
-    protected override void OnParametersSet()
-    {
-        CurrentSection = ParseSection(SectionSlug);
-    }
-
-    private static SettingsSection ParseSection(string? sectionSlug)
-    {
-        return sectionSlug?.Trim().ToLowerInvariant() switch
-        {
-            "profiles" => SettingsSection.Profiles,
-            "appearance-and-behavior" => SettingsSection.AppearanceAndBehavior,
-            "privacy-and-security" => SettingsSection.PrivacyAndSecurity,
-            "performance" => SettingsSection.Performance,
-            "search-engine" => SettingsSection.SearchEngine,
-            "default-browser" => SettingsSection.DefaultBrowser,
-            "on-startup" => SettingsSection.OnStartup,
-            "languages" => SettingsSection.Languages,
-            "downloads" => SettingsSection.Downloads,
-            "accessibility" => SettingsSection.Accessibility,
-            "system" => SettingsSection.System,
-            "reset-settings" => SettingsSection.ResetSettings,
-            "extensions" => SettingsSection.Extensions,
-            "about" => SettingsSection.About,
-            _ => SettingsSection.OnStartup
-        };
-    }
-
-    private static string GetSectionTitle(SettingsSection section)
-    {
-        return section switch
-        {
-            SettingsSection.Profiles => "Profiles",
-            SettingsSection.AppearanceAndBehavior => "Appearance and behavior",
-            SettingsSection.PrivacyAndSecurity => "Privacy and security",
-            SettingsSection.Performance => "Performance",
-            SettingsSection.SearchEngine => "Search engine",
-            SettingsSection.DefaultBrowser => "Default browser",
-            SettingsSection.OnStartup => "On startup",
-            SettingsSection.Languages => "Languages",
-            SettingsSection.Downloads => "Downloads",
-            SettingsSection.Accessibility => "Accessibility",
-            SettingsSection.System => "System",
-            SettingsSection.ResetSettings => "Reset settings",
-            SettingsSection.Extensions => "Extensions",
-            SettingsSection.About => "About Fluens",
-            _ => "Settings"
-        };
-    }
-
-    private static string GetSectionDescription(SettingsSection section)
-    {
-        return section switch
-        {
-            SettingsSection.Profiles => "Manage signed-in profiles and profile sync preferences.",
-            SettingsSection.AppearanceAndBehavior => "Configure theme, toolbar behavior, and startup surface preferences.",
-            SettingsSection.PrivacyAndSecurity => "Control browsing data, permissions, and security-related protections.",
-            SettingsSection.Performance => "Tune resource usage, background activity, and speed preferences.",
-            SettingsSection.SearchEngine => "Choose the default search engine and manage search shortcuts.",
-            SettingsSection.DefaultBrowser => "Review default browser status and file/protocol association settings.",
-            SettingsSection.OnStartup => "Choose what Fluens opens when a new browser session starts.",
-            SettingsSection.Languages => "Manage display language and translation preferences.",
-            SettingsSection.Downloads => "Set download location and ask-where-to-save behavior.",
-            SettingsSection.Accessibility => "Enable accessibility options for readability and navigation support.",
-            SettingsSection.System => "Manage background mode and system integration options.",
-            SettingsSection.ResetSettings => "Restore defaults and reset selected browser preferences.",
-            SettingsSection.Extensions => "Review installed extensions and extension permissions.",
-            SettingsSection.About => "View current version and update channel information.",
-            _ => "Manage browser settings."
-        };
-    }
 }

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <Platforms>AnyCPU;x64</Platforms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.2" />
+    <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.3.36812.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Fluens.UI\Services\AdBlocking\AdBlockResourceType.cs" Link="AdBlocking\AdBlockResourceType.cs" />
+    <Compile Include="..\Fluens.UI\Services\AdBlocking\AdBlockRuleMatchMode.cs" Link="AdBlocking\AdBlockRuleMatchMode.cs" />
+    <Compile Include="..\Fluens.UI\Services\AdBlocking\AdBlockRule.cs" Link="AdBlocking\AdBlockRule.cs" />
+    <Compile Include="..\Fluens.UI\Services\AdBlocking\AdBlockRuleParser.cs" Link="AdBlocking\AdBlockRuleParser.cs" />
+  </ItemGroup>
+</Project>

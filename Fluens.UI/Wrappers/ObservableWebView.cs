@@ -1,6 +1,7 @@
 ﻿using Fluens.AppCore.Contracts;
 using Fluens.AppCore.Helpers;
 using Fluens.StaticPages;
+using Fluens.UI.Services.AdBlocking;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using System.Diagnostics;
@@ -63,6 +64,7 @@ window.addEventListener('keydown', function (e) {
 
     private readonly WebView2 WebView;
     private readonly StaticPagesHost StaticPagesHost;
+    private readonly IAdBlockService AdBlockService;
     private readonly Subject<bool> IsNavigatingSource = new();
     public IObservable<bool> IsNavigating => IsNavigatingSource.AsObservable();
     private readonly Subject<string> DocumentTitleSource = new();
@@ -89,6 +91,7 @@ window.addEventListener('keydown', function (e) {
 
         WebView = webView;
         StaticPagesHost = ServiceLocator.GetRequiredService<StaticPagesHost>();
+        AdBlockService = ServiceLocator.GetRequiredService<IAdBlockService>();
         EnsureInitializedCoreWebView2Async = new(EnsureCoreWebView2Async);
     }
 
@@ -195,8 +198,18 @@ window.addEventListener('keydown', function (e) {
         }
 
         IsInitialized = true;
+        RegisterAdBlockFilters(WebView.CoreWebView2);
         AttachCoreEvents(WebView.CoreWebView2);
+        await AdBlockService.InitializeAsync();
         await AddPageListenersAsync();
+    }
+
+    private static void RegisterAdBlockFilters(CoreWebView2 coreWebView)
+    {
+        coreWebView.AddWebResourceRequestedFilter(
+            "*",
+            CoreWebView2WebResourceContext.All,
+            CoreWebView2WebResourceRequestSourceKinds.All);
     }
 
     private void AttachCoreEvents(CoreWebView2 coreWebView)
@@ -208,6 +221,7 @@ window.addEventListener('keydown', function (e) {
         coreWebView.HistoryChanged += OnHistoryChanged;
         coreWebView.NewWindowRequested += OnNewWindowRequested;
         coreWebView.WebMessageReceived += OnWebMessageReceived;
+        coreWebView.WebResourceRequested += OnWebResourceRequested;
     }
 
     private void DetachCoreEvents(CoreWebView2 coreWebView)
@@ -219,6 +233,31 @@ window.addEventListener('keydown', function (e) {
         coreWebView.HistoryChanged -= OnHistoryChanged;
         coreWebView.NewWindowRequested -= OnNewWindowRequested;
         coreWebView.WebMessageReceived -= OnWebMessageReceived;
+        coreWebView.WebResourceRequested -= OnWebResourceRequested;
+    }
+
+    private void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
+    {
+        if (!Uri.TryCreate(args.Request.Uri, UriKind.Absolute, out Uri? requestUri))
+        {
+            return;
+        }
+
+        if (StaticPagesHost.IsHostedSettingsUri(requestUri))
+        {
+            return;
+        }
+
+        if (!AdBlockService.ShouldBlock(requestUri, args.ResourceContext))
+        {
+            return;
+        }
+
+        args.Response = sender.Environment.CreateWebResourceResponse(
+            null,
+            307,
+            "No Content",
+            "Content-Type: text/plain");
     }
 
     private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)

@@ -1,0 +1,68 @@
+@inject ILocalSettingService LocalSettingService
+@using Fluens.AppCore.Helpers
+
+<FluentCard>
+    <FluentStack Orientation="Orientation.Vertical">
+        <FluentCheckbox TValue="bool"
+                        Value="@IsAdBlockEnabled"
+                        ValueChanged="OnAdBlockEnabledChangedAsync">
+            Enable network ad blocking
+        </FluentCheckbox>
+
+        <FluentDivider />
+
+        <FluentLabel>Filter lists</FluentLabel>
+
+        @foreach (AdBlockListDefinition definition in ListDefinitions)
+        {
+            bool isSelected = SelectedLists.HasFlag(definition.Id);
+
+            <FluentCheckbox TValue="bool"
+                            Value="@isSelected"
+                            Disabled="@(!IsAdBlockEnabled)"
+                            ValueChanged="@(selected => OnListSelectionChangedAsync(definition.Id, selected))">
+                <FluentStack Orientation="Orientation.Vertical">
+                    <FluentLabel>@definition.DisplayName</FluentLabel>
+                    <FluentLabel>@definition.Description</FluentLabel>
+                </FluentStack>
+            </FluentCheckbox>
+        }
+    </FluentStack>
+</FluentCard>
+
+@code {
+    private static IReadOnlyList<AdBlockListDefinition> ListDefinitions { get; } = AdBlockListCatalog.GetDefinitions();
+
+    private bool IsAdBlockEnabled { get; set; }
+    private AdBlockListSelection SelectedLists { get; set; }
+
+    protected override void OnInitialized()
+    {
+        IsAdBlockEnabled = LocalSettingService.CurrentAdBlockSettings.IsEnabled;
+        SelectedLists = LocalSettingService.CurrentAdBlockSettings.SelectedLists;
+    }
+
+    private Task OnAdBlockEnabledChangedAsync(bool isEnabled)
+    {
+        IsAdBlockEnabled = isEnabled;
+        LocalSettingService.SetAdBlockEnabled(isEnabled);
+        return Task.CompletedTask;
+    }
+
+    private Task OnListSelectionChangedAsync(AdBlockListSelection listId, bool isSelected)
+    {
+        AdBlockListSelection updatedSelection = isSelected
+            ? SelectedLists | listId
+            : SelectedLists & ~listId;
+
+        if (updatedSelection == AdBlockListSelection.None)
+        {
+            updatedSelection = AdBlockListSelection.EasyList;
+        }
+
+        SelectedLists = updatedSelection;
+        LocalSettingService.SetSelectedAdBlockLists(updatedSelection);
+
+        return Task.CompletedTask;
+    }
+}

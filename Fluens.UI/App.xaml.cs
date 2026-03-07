@@ -9,6 +9,7 @@ using Fluens.Data;
 using Fluens.Data.Entities;
 using Fluens.StaticPages;
 using Fluens.UI.Services;
+using Fluens.UI.Services.AdBlocking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using ReactiveUI.Builder;
+using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reflection;
 using Toimik.UrlNormalization;
@@ -46,6 +48,12 @@ public partial class App : Application
                     builder.SetMinimumLevel(LogLevel.Information);
                 });
 
+                services.AddHttpClient("AdBlockLists", client =>
+                {
+                    client.Timeout = TimeSpan.FromSeconds(20);
+                    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "FluensBrowser/1.0");
+                });
+
                 services.AddSingleton<OnStartupConfigViewModel>()
                     .AddSingleton<HistoryPageViewModel>()
                     .AddSingleton<SettingsViewModel>()
@@ -56,6 +64,8 @@ public partial class App : Application
                     .AddSingleton<StaticPagesHost>()
                     .AddSingleton<VisitsService>()
                     .AddSingleton<ILocalSettingService, LocalSettingService>()
+                    .AddSingleton<AdBlockListProvider>()
+                    .AddSingleton<IAdBlockService, AdBlockService>()
                     .AddSingleton<HttpUrlNormalizer>()
                     .AddSingleton<PlacesService>()
                     .AddPooledDbContextFactory<BrowserDbContext>(opts =>
@@ -77,6 +87,10 @@ public partial class App : Application
         await ApplyDbMigrations();
 
         await ApplyOnStartupSetting();
+
+        Observable.FromAsync(can => ServiceLocator.GetRequiredService<IAdBlockService>().InitializeAsync(can))
+            .ObserveOn(ThreadPoolScheduler.Instance)
+            .Subscribe();
     }
 
     private static async Task ApplyDbMigrations()
