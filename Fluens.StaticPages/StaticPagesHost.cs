@@ -39,8 +39,7 @@ public sealed class StaticPagesHost
 
         return uri.Scheme.Equals(BaseAddress.Scheme, StringComparison.OrdinalIgnoreCase)
             && uri.Host.Equals(BaseAddress.Host, StringComparison.OrdinalIgnoreCase)
-            && uri.Port == BaseAddress.Port
-            && uri.AbsolutePath.Equals("/", StringComparison.Ordinal);
+            && uri.Port == BaseAddress.Port;
     }
 
     private async Task EnsureStartedAsync(CancellationToken cancellationToken)

@@ -195,7 +195,7 @@ window.addEventListener('keydown', function (e) {
         coreWebView.NavigationCompleted += OnNavigationCompleted;
         coreWebView.DocumentTitleChanged += OnDocumentTitleChanged;
         coreWebView.FaviconChanged += OnFaviconChanged;
-        //coreWebView.HistoryChanged += OnHistoryChanged;
+        coreWebView.HistoryChanged += OnHistoryChanged;
         coreWebView.NewWindowRequested += OnNewWindowRequested;
         coreWebView.WebMessageReceived += OnWebMessageReceived;
     }
@@ -206,7 +206,7 @@ window.addEventListener('keydown', function (e) {
         coreWebView.NavigationCompleted -= OnNavigationCompleted;
         coreWebView.DocumentTitleChanged -= OnDocumentTitleChanged;
         coreWebView.FaviconChanged -= OnFaviconChanged;
-        //coreWebView.HistoryChanged -= OnHistoryChanged;
+        coreWebView.HistoryChanged -= OnHistoryChanged;
         coreWebView.NewWindowRequested -= OnNewWindowRequested;
         coreWebView.WebMessageReceived -= OnWebMessageReceived;
     }
@@ -217,7 +217,7 @@ window.addEventListener('keydown', function (e) {
 
         if (IsSettingsUri(args.Uri))
         {
-            _ = NavigateToSettingsPageAsync();
+            _ = NavigateToSettingsPageAsync(new(args.Uri));
             return;
         }
         FaviconUrlSource.OnNext(Constants.LoadingFaviconUri);
@@ -231,16 +231,6 @@ window.addEventListener('keydown', function (e) {
         if (!args.IsSuccess)
         {
             return;
-        }
-
-        if (StaticPagesHost.IsHostedSettingsUri(WebView.Source))
-        {
-            UrlSource.OnNext(Constants.SettingsUri);
-            // FaviconUrlSource.OnNext(SettingsIcon);
-        }
-        else
-        {
-            UrlSource.OnNext(WebView.Source);
         }
 
         FaviconUrlSource.OnNext(sender.FaviconUri);
@@ -264,25 +254,28 @@ window.addEventListener('keydown', function (e) {
         }
     }
 
-    //private void OnHistoryChanged(CoreWebView2 sender, object args)
-    //{
-    //    if (!Uri.TryCreate(sender.Source, UriKind.Absolute, out Uri? uri))
-    //    {
-    //        return;
-    //    }
+    private void OnHistoryChanged(CoreWebView2 sender, object args)
+    {
+        if (!Uri.TryCreate(sender.Source, UriKind.Absolute, out Uri? uri))
+        {
+            return;
+        }
 
-    //    if (uri == Constants.AboutBlankUri)
-    //    {
-    //        return;
-    //    }
+        if (uri == Constants.AboutBlankUri)
+        {
+            return;
+        }
 
-    //    if (StaticPagesHost.IsHostedSettingsUri(uri))
-    //    {
-    //        return;
-    //    }
+        if (StaticPagesHost.IsHostedSettingsUri(uri))
+        {
+            //string section = uri.AbsoluteUri.Replace("fluens://", "", StringComparison.OrdinalIgnoreCase);
+            Uri settingsUri = new($"fluens:/{uri.AbsolutePath}");
+            UrlSource.OnNext(settingsUri);
+            return;
+        }
 
-    //    UrlSource.OnNext(uri);
-    //}
+        UrlSource.OnNext(uri);
+    }
 
     private void OnNewWindowRequested(CoreWebView2 sender, CoreWebView2NewWindowRequestedEventArgs args)
     {
@@ -343,13 +336,13 @@ window.addEventListener('keydown', function (e) {
         return isFluensSettings || isChromeSettings;
     }
 
-    private async Task NavigateToSettingsPageAsync()
+    private async Task NavigateToSettingsPageAsync(Uri uri)
     {
+        string section = uri.AbsoluteUri.Replace("fluens://", "", StringComparison.OrdinalIgnoreCase);
+
         await EnsureInitializedCoreWebView2Async.Value;
         Uri settingsUri = await StaticPagesHost.GetSettingsUriAsync();
 
-        WebView.Source = settingsUri;
-
-        UrlSource.OnNext(Constants.SettingsUri);
+        WebView.Source = new(settingsUri, section);
     }
 }
